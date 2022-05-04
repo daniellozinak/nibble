@@ -1,5 +1,6 @@
 import random
 
+import networkx
 import networkx as nx
 from operator import itemgetter
 
@@ -10,20 +11,21 @@ def pick_node(neighbours):
         random_index = random.randrange(0, len(neighbours))
     return random_index
 
-def random_walk(g, start=4, max_iterations=50, epsilon=0.0005):
+
+def random_walk(g, start=4, max_iterations=50, epsilon=10e-8):
     walk_mat = []
     node_list = list(g.nodes)
 
     # init random walk matrix
-    for i in range(len(node_list)):
+    for i in range(len(node_list) + 1):
         temp = []
-        for j in range(len(node_list)):
+        for j in range(len(node_list) + 1):
             temp.append(0)
         walk_mat.append(temp)
 
     current_node = start
     current_degree = g.degree(current_node) + 1
-    walks = [current_node]
+    # walks = [current_node]
     result = {}
     for _ in range(max_iterations):
         changed = False
@@ -33,9 +35,10 @@ def random_walk(g, start=4, max_iterations=50, epsilon=0.0005):
                 walk_mat[current_node][node] = 1 / current_degree
                 result[current_node] = 1 / current_degree
         current_node = pick_node(walk_mat[current_node])
-        current_degree *= (g.degree(current_node) + 1) if changed else 1
-        walks.append(current_node)
-
+        current_degree *= (g.degree(current_node) + 1) * 0.4 if changed else 1
+        # walks.append(current_node)
+    # print("vannila walk")
+    # print(walks)
 
     return result
 
@@ -113,37 +116,52 @@ def min_cond_cut(g, dspprv, max_cutsize=0):
 
 
 ## running the code ..
-def loadGraph(gfile):
+def loadGraph(gfile, delim="   "):
     return nx.read_edgelist(path=gfile, comments='#',
-                            delimiter="   ", nodetype=int)
+                            delimiter=delim, nodetype=int)
 
-def vanilla_nibble(g, seed, epsilon=10e-8, max_cutsize=10, max_iterations=50):
-    random_walk_result = random_walk(g)
+
+def vanilla_nibble(g, seed, max_cutsize=10, max_iterations=100, epsilon=10e-8):
+    random_walk_result = random_walk(g, seed, max_iterations, epsilon)
     random_walk_sorted = nibble_sorted(g, node_dict=random_walk_result)
-    best_community = min_cond_cut(g, dspprv=random_walk_sorted, max_cutsize=10)
+    best_community = min_cond_cut(g, dspprv=random_walk_sorted, max_cutsize=max_cutsize)
     return best_community, random_walk_sorted
 
-def pagerank_nibble(g, seed, alpha=0.85, epsilon=10e-8, max_cutsize=10, iters=100):
+
+def pagerank_nibble(g, seed, max_cutsize=10, iters=100, epsilon=10e-8, alpha=0.85):
     pagerank = ppr(g, seed, alpha, epsilon, iters)
     sorted_pagerank = nibble_sorted(g, node_dict=pagerank)
     best_community = min_cond_cut(g, sorted_pagerank, max_cutsize)
     return best_community, sorted_pagerank
 
 
-g = loadGraph("data/my_data.txt")
+def mark_commmunity_nodes(graph, community, community_size, seed, epsilon):
+    values = {}
+    for node in graph.nodes():
+        values[node] = "not-community"
 
-vanilla_community, vanilla_result = vanilla_nibble(g, 4)
-pagerank_community, pagerank_result = pagerank_nibble(g, 4)
+    for i in range(community_size):
+        node = community[i][0]
+        rank = community[i][1]
+        if rank < epsilon:
+            break
+        values[node] = "community"
+    values[seed] = "seed"
+    networkx.set_node_attributes(graph, values, name="community")
 
 
-print(f"najlepsia komunita podla pagerank nibble, conductance : {pagerank_community[1]}")
-count_p = pagerank_community[0]
-for i in range(count_p):
-    print(f"vrchol {pagerank_result[i][0]} -> rank: {pagerank_result[i][1]}")
+g = loadGraph("data/KarateClub.csv", ";")
+g_copy = g.copy()
+seed = 4
+cutsize = 15
+epsilon = 9e-10
+iterations = 200
 
+vanilla_community, vanilla_result = vanilla_nibble(g, seed, cutsize, iterations, epsilon)
+pagerank_community, pagerank_result = pagerank_nibble(g, seed, cutsize, iterations, epsilon)
 
-print(f"najlepsia komunita podla vanilla nibble, conductance : {vanilla_community[1]}")
-count_p = vanilla_community[0]
-for i in range(count_p):
-    print(f"vrchol {vanilla_result[i][0]} -> rank: {vanilla_result[i][1]}")
-print("")
+mark_commmunity_nodes(g, pagerank_result, pagerank_community[0], seed, epsilon)
+mark_commmunity_nodes(g_copy, vanilla_result, vanilla_community[0], seed, epsilon)
+
+networkx.write_gexf(g, f"data/nibble_9e-10/output_pagerank_i={iterations}_cutsize={cutsize}_seed={seed}.gexf")
+networkx.write_gexf(g_copy, f"data/nibble_9e-10/output_vanilla_i={iterations}_cutsize={cutsize}_seed={seed}.gexf")
