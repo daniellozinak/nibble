@@ -135,7 +135,7 @@ def pagerank_nibble(g, seed, max_cutsize=10, iters=100, epsilon=10e-8, alpha=0.8
     return best_community, sorted_pagerank
 
 
-def mark_commmunity_nodes(graph, community, community_size, seed, epsilon):
+def mark_commmunity_nodes(graph, community, community_size, seed, epsilon, cutsize, iteration, variant):
     values = {}
     for node in graph.nodes():
         values[node] = "not-community"
@@ -147,21 +147,23 @@ def mark_commmunity_nodes(graph, community, community_size, seed, epsilon):
             break
         values[node] = "community"
     values[seed] = "seed"
-    networkx.set_node_attributes(graph, values, name="community")
+    print(f"currently v={variant}_cs={cutsize}_e={epsilon}_i={iteration}")
+    networkx.set_node_attributes(graph, values, name=f"v={variant}_s={seed}_cs={cutsize}_e={epsilon}_i={iteration}")
 
 
 g = loadGraph("data/KarateClub.csv", ";")
-g_copy = g.copy()
 seed = 4
-cutsize = 15
-epsilon = 9e-10
-iterations = 200
+cutsizes = [10, 15]
+epsilons = [10e-5, 10e-8, 10e-11]
+iterations = [100, 200]
 
-vanilla_community, vanilla_result = vanilla_nibble(g, seed, cutsize, iterations, epsilon)
-pagerank_community, pagerank_result = pagerank_nibble(g, seed, cutsize, iterations, epsilon)
+for cutsize in cutsizes:
+    for epsilon in epsilons:
+        for iteration in iterations:
+            vanilla_community, vanilla_result = vanilla_nibble(g, seed, cutsize, iteration, epsilon)
+            pagerank_community, pagerank_result = pagerank_nibble(g, seed, cutsize, iteration, epsilon)
 
-mark_commmunity_nodes(g, pagerank_result, pagerank_community[0], seed, epsilon)
-mark_commmunity_nodes(g_copy, vanilla_result, vanilla_community[0], seed, epsilon)
+            mark_commmunity_nodes(g, pagerank_result, pagerank_community[0], seed, epsilon, cutsize, iteration, "pr")
+            mark_commmunity_nodes(g, vanilla_result, vanilla_community[0], seed, epsilon, cutsize, iteration, "v")
 
-networkx.write_gexf(g, f"data/nibble_9e-10/output_pagerank_i={iterations}_cutsize={cutsize}_seed={seed}.gexf")
-networkx.write_gexf(g_copy, f"data/nibble_9e-10/output_vanilla_i={iterations}_cutsize={cutsize}_seed={seed}.gexf")
+networkx.write_gexf(g, f"data/allinone.gexf")
